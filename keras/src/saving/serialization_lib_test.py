@@ -120,10 +120,7 @@ class SerializationLibTest(testing.TestCase):
         config = {
             "class_name": "Dense",
             "module": "keras.layers",
-            "config": {
-                "units": 4,
-                "kernel_initializer": my_test_fn
-            }
+            "config": {"units": 4, "kernel_initializer": my_test_fn},
         }
 
         # Test that raw callables raise TypeError in safe mode
@@ -131,7 +128,8 @@ class SerializationLibTest(testing.TestCase):
             serialization_lib.deserialize_keras_object(config, safe_mode=True)
 
         # Test that raw callables pass in unsafe mode
-        # It may fail later in the deserialization, but it shouldn't raise the "Unsafe callable" TypeError.
+        # It may fail later in the deserialization, but it shouldn't
+        # raise the "Unsafe callable" TypeError.
         try:
             serialization_lib.deserialize_keras_object(config, safe_mode=False)
         except TypeError as e:
