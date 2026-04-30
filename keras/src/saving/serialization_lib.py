@@ -1,5 +1,6 @@
 """Object config serialization and deserialization logic."""
 
+import functools
 import importlib
 import inspect
 import types
@@ -405,6 +406,33 @@ def serialize_dict(obj):
     return {key: serialize_keras_object(value) for key, value in obj.items()}
 
 
+def _check_for_raw_callables(config):
+    UNSAFE_TYPES = (
+        types.FunctionType,
+        types.BuiltinFunctionType,
+        types.MethodType,
+        types.BuiltinMethodType,
+        functools.partial,
+        functools.partialmethod,
+    )
+    if isinstance(config, dict):
+        for v in config.values():
+            _check_for_raw_callables(v)
+    elif isinstance(config, (list, tuple)):
+        for v in config:
+            _check_for_raw_callables(v)
+    elif isinstance(config, UNSAFE_TYPES):
+        raise TypeError(
+            f"Unsafe callable {config} found in config. "
+            "Arbitrary callables are not allowed in config dicts "
+            "during deserialization. "
+            "If you trust the source of the artifact, you can override "
+            "this error by passing `safe_mode=False` to the loading "
+            "function, or calling "
+            "`keras.config.enable_unsafe_deserialization()`."
+        )
+
+
 @keras_export(
     [
         "keras.saving.deserialize_keras_object",
@@ -516,6 +544,9 @@ def deserialize_keras_object(
     safe_scope_arg = in_safe_mode()  # Enforces SafeModeScope
     safe_mode = safe_scope_arg if safe_scope_arg is not None else safe_mode
 
+    if safe_mode and not kwargs.get("inner_call", False):
+        _check_for_raw_callables(config)
+
     module_objects = kwargs.pop("module_objects", None)
     custom_objects = custom_objects or {}
     tlco = global_state.get_global_attribute("custom_objects_scope_dict", {})
@@ -537,7 +568,10 @@ def deserialize_keras_object(
     if isinstance(config, (list, tuple)):
         return [
             deserialize_keras_object(
-                x, custom_objects=custom_objects, safe_mode=safe_mode
+                x,
+                custom_objects=custom_objects,
+                safe_mode=safe_mode,
+                inner_call=True,
             )
             for x in config
         ]
@@ -596,12 +630,16 @@ def deserialize_keras_object(
                         module_objects[config], config, fn_module_name
                     ),
                     custom_objects=custom_objects,
+                    safe_mode=safe_mode,
+                    inner_call=True,
                 )
             return deserialize_keras_object(
                 serialize_with_public_class(
                     module_objects[config], inner_config=inner_config
                 ),
                 custom_objects=custom_objects,
+                safe_mode=safe_mode,
+                inner_call=True,
             )
 
     if isinstance(config, PLAIN_TYPES):
@@ -612,7 +650,10 @@ def deserialize_keras_object(
     if "class_name" not in config or "config" not in config:
         return {
             key: deserialize_keras_object(
-                value, custom_objects=custom_objects, safe_mode=safe_mode
+                value,
+                custom_objects=custom_objects,
+                safe_mode=safe_mode,
+                inner_call=True,
             )
             for key, value in config.items()
         }
@@ -645,16 +686,19 @@ def deserialize_keras_object(
                 inner_config["start"],
                 custom_objects=custom_objects,
                 safe_mode=safe_mode,
+                inner_call=True,
             ),
             deserialize_keras_object(
                 inner_config["stop"],
                 custom_objects=custom_objects,
                 safe_mode=safe_mode,
+                inner_call=True,
             ),
             deserialize_keras_object(
                 inner_config["step"],
                 custom_objects=custom_objects,
                 safe_mode=safe_mode,
+                inner_call=True,
             ),
         )
     if config["class_name"] == "__lambda__":

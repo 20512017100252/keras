@@ -113,6 +113,31 @@ class SerializationLibTest(testing.TestCase):
         _, deserialized, _ = self.roundtrip(Ellipsis)
         self.assertEqual(..., deserialized)
 
+    def test_deserialize_raw_callables(self):
+        def my_test_fn():
+            return 1.0
+
+        config = {
+            "class_name": "Dense",
+            "module": "keras.layers",
+            "config": {
+                "units": 4,
+                "kernel_initializer": my_test_fn
+            }
+        }
+
+        # Test that raw callables raise TypeError in safe mode
+        with self.assertRaisesRegex(TypeError, "Unsafe callable"):
+            serialization_lib.deserialize_keras_object(config, safe_mode=True)
+
+        # Test that raw callables pass in unsafe mode
+        # It may fail later in the deserialization, but it shouldn't raise the "Unsafe callable" TypeError.
+        try:
+            serialization_lib.deserialize_keras_object(config, safe_mode=False)
+        except TypeError as e:
+            if "Unsafe callable" in str(e):
+                self.fail("Unsafe callable error raised when safe_mode=False")
+
     def test_tensors_and_shapes(self):
         x = ops.random.normal((2, 2), dtype="float64")
         obj = {"x": x}
